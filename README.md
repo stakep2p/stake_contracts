@@ -1,66 +1,14 @@
-## Foundry
+## P2PStake
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+**P2PStake is a fully permissionless proveably fair betting protocol built on the Polygon Blockchain. P2PStake's betting model is via pooled stake vaults where winners take loser's shares and nullified or bets ended in a draw state get refunded to bettors.**
 
-Foundry consists of:
+Some things to know about P2PStake:
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+-   **Authentication**: Strictly wallets (Metamask, TrustWallet, etc) and no KYC.
+-   **Deposits**: No deposits. Bet amounts are paid for on the market (pay as you go).
+-   **Withdrawals**: No limit on withdrawals, redeem wins anytime on the Polygon Network.
+-   **Bets**: Two possible bet outcomes, Yes or No. 2.5% fee per bet. No other fee charged anywhere, after.
 
-## Documentation
 
-https://book.getfoundry.sh/
 
-## Usage
-
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+https://p2pstake.xyz/

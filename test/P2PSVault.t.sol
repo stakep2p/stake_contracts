@@ -29,7 +29,5 @@ contract P2PSVaultTest is Test {
         assertEq(p2pSVault.publisher(), publisher);
     }
 
-    function test_TransferOwnership() public {
-        
-    }
+    function test_TransferOwnership() public {}
 }

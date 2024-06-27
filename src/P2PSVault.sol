@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
+
 import {SafeERC20} from "openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {console} from "forge-std/console.sol";
 
 contract P2PSVault {
     using SafeERC20 for IERC20;
-    address betToken;
-    
+
+    address public betToken;
+
     address public owner;
     address public feeRecipient;
     address public publisher;
@@ -19,6 +20,7 @@ contract P2PSVault {
     uint256 public fee;
     uint256 public pendingFee;
     uint256 public totalFeeEarned;
+    uint256 public constant MAX_FEE_BPS = 50; // 5%
 
     // EVENTS
     event ProposedOwner(address guy);
@@ -35,6 +37,8 @@ contract P2PSVault {
     event FeeSet(uint256 fee);
     event BetTokenSet(address token);
     event FeeClaimed(address guy);
+
+    error Error__Fee();
 
     // MODIFIERS
     modifier onlyOwner() {
@@ -62,12 +66,14 @@ contract P2PSVault {
         uint256 id;
         address creator;
         string text;
+        string image;
         uint256 createdTime;
         string outcome;
         uint256 duration;
         uint256 publishTime;
         bool expired;
         address[] eligibleAddresses;
+        uint256 volume;
     }
 
     struct BetPlacement {
@@ -76,24 +82,53 @@ contract P2PSVault {
         string side;
         uint256 timestamp;
         string text;
+        string image;
         uint256 expiry;
     }
 
     Bet[] public bets;
 
-    mapping(address => uint256) betToCreator;
+    mapping(address => uint256) public betToCreator;
+    mapping(address => mapping(uint256 => bool)) public userToBetId;
     mapping(address => BetPlacement[]) public userBets;
+    mapping(address => uint256) public userBetCount;
+    mapping(address => uint256) public userVolume;
     mapping(uint256 => mapping(address => uint256)) public betAmounts;
     mapping(uint256 => mapping(string => uint256)) public totalBetAmounts;
-    // mapping(uint256 => uint256) public betIdToTotal;
 
     constructor() {
         owner = msg.sender;
     }
 
-    function createBet(string memory _text, uint256 _duration, address[] memory _eligibleAddresses) external onlyBetInitiator returns (uint256 id) {
+    function createBet(string memory _text, string memory _image, uint256 _duration)
+        external
+        onlyBetInitiator
+        returns (uint256 id)
+    {
         uint256 betId = bets.length;
-        bets.push(Bet(betId, msg.sender, _text, block.timestamp, "", block.timestamp + _duration, 0, false, _eligibleAddresses));
+        address[] memory eligAddrs = new address[](0);
+
+        bets.push(
+            Bet(
+                betId, msg.sender, _text, _image, block.timestamp, "", _duration, 0, false, eligAddrs, 0
+            )
+        );
+        betToCreator[msg.sender] = betId;
+        emit BetCreated(betId, msg.sender, block.timestamp, _duration);
+        return id;
+    }
+
+    function createClosedBet(string memory _text, string memory _image, uint256 _duration, address[] memory _eligibleAddresses)
+        external
+        onlyBetInitiator
+        returns (uint256 id)
+    {
+        uint256 betId = bets.length;
+        bets.push(
+            Bet(
+                betId, msg.sender, _text, _image, block.timestamp, "", _duration, 0, false, _eligibleAddresses, 0
+            )
+        );
         betToCreator[msg.sender] = betId;
         emit BetCreated(betId, msg.sender, block.timestamp, _duration);
         return id;
@@ -101,13 +136,19 @@ contract P2PSVault {
 
     function placeBet(uint256 betId, uint256 amount, string memory side) external {
         require(betId < bets.length, "Bet does not exist");
+        require(!userToBetId[msg.sender][betId], "Already bet on this");
+        
         Bet storage bet = bets[betId];
         require(block.timestamp < bet.createdTime + bet.duration, "Bet has expired");
+        require(amount > 0, "Zero amounts not allowed");
 
         if (bet.eligibleAddresses.length > 0) {
             require(isEligible(bet.eligibleAddresses, msg.sender), "Not eligible to stake on this bet");
         }
-        require(keccak256(bytes(side)) == keccak256(bytes("YES")) || keccak256(bytes(side)) == keccak256(bytes("NO")), "Invalid side");
+        require(
+            keccak256(bytes(side)) == keccak256(bytes("YES")) || keccak256(bytes(side)) == keccak256(bytes("NO")),
+            "Invalid side"
+        );
 
         IERC20(betToken).safeTransferFrom(msg.sender, address(this), amount);
 
@@ -115,9 +156,13 @@ contract P2PSVault {
         uint256 feePaid = (amount * fee) / 1000;
         uint256 netAmount = amount - feePaid;
 
-        userBets[msg.sender].push(BetPlacement(betId, netAmount, side, block.timestamp, bet.text, bet.duration));
+        userBets[msg.sender].push(BetPlacement(betId, netAmount, side, block.timestamp, bet.text, bet.image, bet.duration));
+        userToBetId[msg.sender][betId] = true;
         betAmounts[betId][msg.sender] += netAmount;
         totalBetAmounts[betId][side] += netAmount;
+        userBetCount[msg.sender] += 1;
+        userVolume[msg.sender] += netAmount;
+        bet.volume += netAmount;
         pendingFee += feePaid;
         totalFeeEarned += feePaid;
 
@@ -129,7 +174,11 @@ contract P2PSVault {
         Bet storage bet = bets[betId];
         require(block.timestamp >= bet.createdTime + bet.duration, "Bet duration not ended");
         require(bet.expired == false, "Bet already resolved");
-        require(keccak256(bytes(outcome)) == keccak256(bytes("YES")) || keccak256(bytes(outcome)) == keccak256(bytes("NO")) || keccak256(bytes(outcome)) == keccak256(bytes("DRAW")), "Invalid outcome");
+        require(
+            keccak256(bytes(outcome)) == keccak256(bytes("YES")) || keccak256(bytes(outcome)) == keccak256(bytes("NO"))
+                || keccak256(bytes(outcome)) == keccak256(bytes("DRAW")),
+            "Invalid outcome"
+        );
 
         bet.outcome = outcome;
         bet.publishTime = block.timestamp;
@@ -139,82 +188,38 @@ contract P2PSVault {
     }
 
     function claimWinning(uint256 _betId) external {
-    require(userBets[msg.sender].length > 0, "No bets");
-    BetPlacement memory betPlacement = userBets[msg.sender][_betId];
-    Bet storage bet = bets[betPlacement.betId];
+        require(userBets[msg.sender].length > 0, "No bets");
+        BetPlacement memory betPlacement = userBets[msg.sender][_betId];
+        Bet storage bet = bets[betPlacement.betId];
 
-    require(bet.expired, "Bet not yet resolved");
+        require(bet.expired, "Bet not yet resolved");
 
-    if (keccak256(bytes(bet.outcome)) == keccak256(bytes(betPlacement.side))) {
-        uint256 userBetAmount = betAmounts[betPlacement.betId][msg.sender];
+        if (keccak256(bytes(bet.outcome)) == keccak256(bytes(betPlacement.side))) {
+            uint256 userBetAmount = betAmounts[betPlacement.betId][msg.sender];
 
-        // Calculate the total amount bet on the winning side
-        uint256 winningAmount = totalBetAmounts[betPlacement.betId][bet.outcome];
+            uint256 winningAmount = totalBetAmounts[betPlacement.betId][bet.outcome];
+            string memory losingSide = keccak256(bytes(bet.outcome)) == keccak256(bytes("YES")) ? "NO" : "YES";
+            uint256 losingAmount = totalBetAmounts[betPlacement.betId][losingSide];
 
-        // Calculate the total amount bet on the losing side
-        string memory losingSide = keccak256(bytes(bet.outcome)) == keccak256(bytes("YES")) ? "NO" : "YES";
-        uint256 losingAmount = totalBetAmounts[betPlacement.betId][losingSide];
+            uint256 userSharePercentage = (userBetAmount * 1e18) / winningAmount;
+            uint256 userShareOfLosingAmount = (userSharePercentage * losingAmount) / 1e18;
+            uint256 totalWinnings = userBetAmount + userShareOfLosingAmount;
 
-        // Calculate the user's percentage share of the total amount bet on the winning side
-        uint256 userSharePercentage = (userBetAmount * 1e18) / winningAmount;
+            betAmounts[betPlacement.betId][msg.sender] = 0;
+            require(totalWinnings > 0, "No winnings to claim");
 
-        // Calculate the user's share of the losing side's total stake
-        uint256 userShareOfLosingAmount = (userSharePercentage * losingAmount) / 1e18;
+            IERC20(betToken).safeTransfer(msg.sender, totalWinnings);
+            emit WinningsClaimed(msg.sender, totalWinnings);
+        } else if (keccak256(bytes(bet.outcome)) == keccak256(bytes("DRAW"))) {
+            uint256 userBetAmount = betAmounts[betPlacement.betId][msg.sender];
 
-        // Total winnings is the user's initial bet amount plus their share of the losing amount
-        uint256 totalWinnings = userBetAmount + userShareOfLosingAmount;
+            betAmounts[betPlacement.betId][msg.sender] = 0;
+            require(userBetAmount > 0, "No amount to refund");
 
-        // Prevent double claims
-        betAmounts[betPlacement.betId][msg.sender] = 0;
-
-        require(totalWinnings > 0, "No winnings to claim");
-
-        // Transfer the winnings to the user
-        IERC20(betToken).safeTransfer(msg.sender, totalWinnings);
-
-        emit WinningsClaimed(msg.sender, totalWinnings);
-    } else if (keccak256(bytes(bet.outcome)) == keccak256(bytes("DRAW"))) {
-        uint256 userBetAmount = betAmounts[betPlacement.betId][msg.sender];
-
-        // Prevent double claims
-        betAmounts[betPlacement.betId][msg.sender] = 0;
-
-        require(userBetAmount > 0, "No amount to refund");
-
-        // Refund the stake
-        IERC20(betToken).safeTransfer(msg.sender, userBetAmount);
-
-        emit BetRefunded(msg.sender, userBetAmount);
+            IERC20(betToken).safeTransfer(msg.sender, userBetAmount);
+            emit BetRefunded(msg.sender, userBetAmount);
+        }
     }
-}
-
-
-    // function claimWinnings() external {
-    //     uint256 totalWinnings = 0;
-        
-    //     if (userBets[msg.sender].length == 0) {
-    //         revert("No bets");
-    //     }
-
-    //     for (uint256 i = 0; i < userBets[msg.sender].length; i++) {
-    //         BetPlacement memory betPlacement = userBets[msg.sender][i];
-    //         Bet storage bet = bets[betPlacement.betId];
-
-    //         if (bet.expired && keccak256(bytes(bet.outcome)) == keccak256(bytes(betPlacement.side))) {
-    //             uint256 userBetAmount = betAmounts[betPlacement.betId][msg.sender];
-    //             uint256 winningAmount = totalBetAmounts[betPlacement.betId]["YES"] + totalBetAmounts[betPlacement.betId]["NO"];
-    //             uint256 userShare = (userBetAmount * 1e18) / totalBetAmounts[betPlacement.betId][bet.outcome];
-    //             totalWinnings += (userShare * winningAmount) / 1e18;
-
-    //             // prevent double claims
-    //             betAmounts[betPlacement.betId][msg.sender] = 0;
-    //         }
-    //     }
-
-    //     require(totalWinnings > 0, "No winnings to claim");
-    //     // payable(msg.sender).transfer(totalWinnings);
-    //     emit WinningsClaimed(msg.sender, totalWinnings);
-    // }
 
     function isEligible(address[] memory eligibleAddresses, address user) internal pure returns (bool) {
         for (uint256 i = 0; i < eligibleAddresses.length; i++) {
@@ -226,28 +231,12 @@ contract P2PSVault {
     }
 
     function getBet(uint256 betId) external view returns (Bet memory bet) {
-       require(betId < bets.length);
+        require(betId < bets.length);
         bet = bets[betId];
     }
 
     function getAllBetsCreated() external view returns (Bet[] memory pulledBets) {
         pulledBets = bets;
-        // Bet[] memory initBets = new Bet[](bets.length);
-        // uint256 betCounts = 0;
-        // uint256 betsLength = bets.length;
-
-        // for (uint256 i = 0; i < betsLength; i++) {
-        //     if (bets[i].expired == false) {
-        //         initBets[betCounts] = bets[i];
-        //         betCounts++;
-        //     }
-        // }
-
-        // pulledBets = new Bet[](betCounts);
-        // for (uint256 i = 0; i < betCounts; i++) {
-        //     pulledBets[i] = initBets[i];
-        // }
-        // return pulledBets;
     }
 
     function getSideTotal(uint256 _betId, string memory _side) external view returns (uint256) {
@@ -310,6 +299,9 @@ contract P2PSVault {
     }
 
     function setFee(uint256 _fee) public onlyOwner {
+        if (_fee > MAX_FEE_BPS) {
+            revert Error__Fee();
+        }
         fee = _fee;
         emit FeeSet(_fee);
     }

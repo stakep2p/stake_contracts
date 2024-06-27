@@ -2,10 +2,10 @@
 pragma solidity ^0.8.13;
 
 import {Script, console} from "forge-std/Script.sol";
-import {P2PSVault} from "../src/P2PSVault.sol";
+import {USDCs} from "../src/USDCs.sol";
 
-contract P2PSVaultScript is Script {
-    P2PSVault p2pSVault;
+contract USDCsScript is Script {
+    USDCs usdcs;
 
     function run() public {
         uint256 privateKey = vm.envUint("PRIVATE_KEY");
@@ -13,7 +13,7 @@ contract P2PSVaultScript is Script {
         console.log("Address: ", guy);
 
         vm.startBroadcast(privateKey);
-        p2pSVault = new P2PSVault();
+        usdcs = new USDCs();
         vm.stopBroadcast();
     }
 }

@@ -1,8 +1,8 @@
-## P2PStake
+## stakep2p
 
-**P2PStake is a fully permissionless proveably fair betting protocol built on the Polygon Blockchain. P2PStake's betting model is via pooled stake vaults where winners take loser's shares and nullified or bets ended in a draw state get refunded to bettors.**
+**stakep2p is a fully permissionless proveably fair betting protocol built on the Polygon Blockchain. stakep2p's betting model is via pooled stake vaults where winners take loser's shares and nullified or bets ended in a draw state get refunded to bettors.**
 
-Some things to know about P2PStake:
+Some things to know about stakep2p:
 
 -   **Authentication**: Strictly wallets (Metamask, TrustWallet, etc) and no KYC.
 -   **Deposits**: No deposits. Bet amounts are paid for on the market (pay as you go).
@@ -11,4 +11,4 @@ Some things to know about P2PStake:
 
 
 
-https://p2pstake.xyz/
+https://stakep2p.com/

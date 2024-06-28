@@ -79,7 +79,7 @@ contract P2PSVaultTest is Test {
         console.log("Fee collector after set: ", p2pSVault.feeRecipient());
     }
 
-    function test_createBet() public {
+    function test_createBuddyBet() public {
         test_setBetInitiator();
         test_SetPublisher();
         test_setFeeRecipient();
@@ -97,7 +97,7 @@ contract P2PSVaultTest is Test {
         eligibleAddr[3] = address(444444);
         eligibleAddr[4] = address(555555);
 
-        uint256 betId = p2pSVault.createClosedBet(text, image, duration, eligibleAddr);
+        uint256 betId = p2pSVault.createBuddyBet(text, image, duration, eligibleAddr);
 
         console.log("Created bet with ID: ", betId);
     }
@@ -119,7 +119,7 @@ contract P2PSVaultTest is Test {
     }
 
     function test_placeBet() public {
-        test_createBet();
+        test_createBuddyBet();
 
         vm.startPrank(owner);
         USDC.transfer(address(111111), 1e18);

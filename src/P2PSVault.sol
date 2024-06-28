@@ -118,11 +118,11 @@ contract P2PSVault {
         return id;
     }
 
-    function createClosedBet(string memory _text, string memory _image, uint256 _duration, address[] memory _eligibleAddresses)
+    function createBuddyBet(string memory _text, string memory _image, uint256 _duration, address[] memory _eligibleAddresses)
         external
-        onlyBetInitiator
         returns (uint256 id)
     {
+        // @note the bigger the amount of your eligible buddies, the bigger the gas cost during their bet placement because of the loop. keep the participants minimal.
         uint256 betId = bets.length;
         bets.push(
             Bet(

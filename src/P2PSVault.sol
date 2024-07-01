@@ -91,6 +91,7 @@ contract P2PSVault {
     mapping(address => uint256) public betToCreator;
     mapping(address => mapping(uint256 => bool)) public userToBetId;
     mapping(address => BetPlacement[]) public userBets;
+    mapping(address => mapping (uint256 => BetPlacement)) public userBet;
     mapping(address => uint256) public userBetCount;
     mapping(address => uint256) public userVolume;
     mapping(uint256 => mapping(address => uint256)) public betAmounts;
@@ -157,6 +158,7 @@ contract P2PSVault {
         uint256 netAmount = amount - feePaid;
 
         userBets[msg.sender].push(BetPlacement(betId, netAmount, side, block.timestamp, bet.text, bet.image, bet.duration));
+        userBet[msg.sender][betId] = BetPlacement(betId, netAmount, side, block.timestamp, bet.text, bet.image, bet.duration);
         userToBetId[msg.sender][betId] = true;
         betAmounts[betId][msg.sender] += netAmount;
         totalBetAmounts[betId][side] += netAmount;
@@ -189,7 +191,7 @@ contract P2PSVault {
 
     function claimWinning(uint256 _betId) external {
         require(userBets[msg.sender].length > 0, "No bets");
-        BetPlacement memory betPlacement = userBets[msg.sender][_betId];
+        BetPlacement memory betPlacement = userBet[msg.sender][_betId];
         Bet storage bet = bets[betPlacement.betId];
 
         require(bet.expired, "Bet not yet resolved");
